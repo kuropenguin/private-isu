@@ -32,7 +32,10 @@ services:
           memory: 1g
 
   mysql:
-    image: mysql/mysql-server:8.0
+    # before
+    # image: mysql/mysql-server:8.0
+    # after
+    build: mysql/
     environment:
       - "TZ=Asia/Tokyo"
       - "MYSQL_ROOT_HOST=%"
