@@ -67,6 +67,16 @@ type Comment struct {
 	User      User
 }
 
+type postAndUser struct {
+	ID          int       `db:"id"`
+	UserID      int       `db:"user_id"`
+	Imgdata     []byte    `db:"imgdata"`
+	Body        string    `db:"body"`
+	Mime        string    `db:"mime"`
+	CreatedAt   time.Time `db:"created_at"`
+	AccountName string    `db:"account_name"`
+}
+
 func init() {
 	memdAddr := os.Getenv("ISUCONP_MEMCACHED_ADDRESS")
 	if memdAddr == "" {
@@ -172,10 +182,20 @@ func getFlash(w http.ResponseWriter, r *http.Request, key string) string {
 	}
 }
 
-func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, error) {
+func makePosts(results []postAndUser, csrfToken string, allComments bool) ([]Post, error) {
 	var posts []Post
 
-	for _, p := range results {
+	for _, r := range results {
+		p := Post{
+			ID:        r.ID,
+			UserID:    r.UserID,
+			Body:      r.Body,
+			Mime:      r.Mime,
+			CreatedAt: r.CreatedAt,
+			User: User{
+				AccountName: r.AccountName,
+			},
+		}
 		err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
 		if err != nil {
 			return nil, err
@@ -202,22 +222,9 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 		for i, j := 0, len(comments)-1; i < j; i, j = i+1, j-1 {
 			comments[i], comments[j] = comments[j], comments[i]
 		}
-
 		p.Comments = comments
 
-		err = db.Get(&p.User, "SELECT * FROM `users` WHERE `id` = ?", p.UserID)
-		if err != nil {
-			return nil, err
-		}
-
 		p.CSRFToken = csrfToken
-
-		if p.User.DelFlg == 0 {
-			posts = append(posts, p)
-		}
-		if len(posts) >= postsPerPage {
-			break
-		}
 	}
 
 	return posts, nil
@@ -385,9 +392,21 @@ func getLogout(w http.ResponseWriter, r *http.Request) {
 func getIndex(w http.ResponseWriter, r *http.Request) {
 	me := getSessionUser(r)
 
-	results := []Post{}
+	results := []postAndUser{}
 
-	err := db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` ORDER BY `created_at` DESC")
+	err := db.Select(&results,
+		`SELECT 
+			p.id, 
+			p.user_id, 
+			p.body, 
+			p.mime, 
+			p.created_at, 
+			u.account_name 
+		FROM posts AS p LEFT JOIN users AS u ON p.user_id = u.id 
+		WHERE u.del_flg=0
+		ORDER BY p.created_at 
+		DESC LIMIT 20`,
+	)
 	if err != nil {
 		log.Print(err)
 		return
