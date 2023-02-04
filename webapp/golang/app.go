@@ -225,6 +225,8 @@ func makePosts(results []postAndUser, csrfToken string, allComments bool) ([]Pos
 		p.Comments = comments
 
 		p.CSRFToken = csrfToken
+
+		posts = append(posts, p)
 	}
 
 	return posts, nil
@@ -450,9 +452,22 @@ func getAccountName(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := []Post{}
+	results := []postAndUser{}
 
-	err = db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = ? ORDER BY `created_at` DESC", user.ID)
+	err = db.Select(&results,
+		`SELECT
+			p.id,
+			p.user_id,
+			p.body,
+			p.mime,
+			p.created_at,
+			u.account_name
+		FROM posts AS p LEFT JOIN users AS u ON p.user_id = u.id
+		WHERE u.id = ?
+		ORDER BY p.created_at DESC
+		LIMIT 20`,
+		user.ID,
+	)
 	if err != nil {
 		log.Print(err)
 		return
@@ -539,8 +554,21 @@ func getPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := []Post{}
-	err = db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `created_at` <= ? ORDER BY `created_at` DESC", t.Format(ISO8601Format))
+	results := []postAndUser{}
+	err = db.Select(&results,
+		`SELECT
+			p.id,
+			p.user_id,
+			p.body,
+			p.mime,
+			p.created_at,
+			u.account_name
+		FROM posts AS p LEFT JOIN users AS u ON p.user_id = u.id
+		WHERE u.del_flg=0 AND p.created_at <= ?
+		ORDER BY p.created_at DESC 
+		LIMIT 20`,
+		t.Format(ISO8601Format),
+	)
 	if err != nil {
 		log.Print(err)
 		return
@@ -575,12 +603,22 @@ func getPostsID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := []Post{}
-	err = db.Select(&results, "SELECT * FROM `posts` WHERE `id` = ?", pid)
-	if err != nil {
-		log.Print(err)
-		return
-	}
+	results := []postAndUser{}
+
+	err = db.Select(&results,
+		`SELECT 
+			p.id, 
+			p.user_id, 
+			p.body, 
+			p.mime, 
+			p.created_at, 
+			u.account_name 
+		FROM posts AS p LEFT JOIN users AS u ON p.user_id = u.id 
+		WHERE u.del_flg=0 AND p.id = ?
+		ORDER BY p.created_at 
+		DESC LIMIT 20`,
+		pid,
+	)
 
 	posts, err := makePosts(results, getCSRFToken(r), true)
 	if err != nil {
