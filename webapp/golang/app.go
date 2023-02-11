@@ -563,7 +563,7 @@ func getPosts(w http.ResponseWriter, r *http.Request) {
 			p.mime,
 			p.created_at,
 			u.account_name
-		FROM posts AS p LEFT JOIN users AS u ON p.user_id = u.id
+		FROM posts AS p FORCE INDEX(posts_user_idx) LEFT JOIN users AS u ON p.user_id = u.id
 		WHERE u.del_flg=0 AND p.created_at <= ?
 		ORDER BY p.created_at DESC 
 		LIMIT 20`,
